@@ -19,7 +19,7 @@ if 'status_msg' not in st.session_state:
 if 'status_color' not in st.session_state:
     st.session_state.status_color = "gray"
 
-url = st.text_input("Paste Video/Playlist Link Here:", placeholder="https://youtube.com...")
+url = st.text_input("Paste Video/Playlist Link Here:", placeholder="https://www.youtube.com/watch?v=...")
 
 if st.button("🔍 Fetch Video Info", use_container_width=True):
     if not url.strip():
@@ -32,7 +32,7 @@ if st.button("🔍 Fetch Video Info", use_container_width=True):
                 'http_headers': {
                     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
                 },
-                'extractor_args': {'youtube': {'player_client': ['web', 'default']}},
+                'extractor_args': {'youtube': {'player_client': ['web_embedded', 'web', 'tv']}}, # 🌟 Extra clients backup ke liye
             }
             try:
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -51,7 +51,6 @@ if st.button("🔍 Fetch Video Info", use_container_width=True):
                         qualities = set()
                         st.session_state.available_formats.clear()
                         
-                        # 🌟 Ab FFmpeg hai, toh hum saari high qualities (1080p, 2K, 4K) fetch kar sakte hain
                         for f in formats:
                             if f.get('height') and f.get('vcodec') != 'none':
                                 h = f.get('height')
@@ -89,7 +88,7 @@ is_mp3 = st.checkbox("🎵 Download as MP3 (Audio Only)")
 
 if url.strip() and st.session_state.status_color == "green":
     if st.button("🚀 Prepare Download Link", use_container_width=True):
-        with st.spinner("⏳ Server par file taiyar ho rahi hai, isme thoda zyada time lag sakta hai kyunki high-quality video aur audio merge ho rahe hain..."):
+        with st.spinner("⏳ Server par file taiyar ho rahi hai..."):
             try:
                 if is_mp3:
                     out_filename = "downloaded_audio.mp3"
@@ -97,6 +96,7 @@ if url.strip() and st.session_state.status_color == "green":
                         'format': 'bestaudio/best',
                         'outtmpl': 'downloaded_audio.%(ext)s',
                         'nocheckcertificate': True,
+                        'extractor_args': {'youtube': {'player_client': ['web_embedded', 'web', 'tv']}}, # 🌟 Fix for 403 error
                         'postprocessors': [{
                             'key': 'FFmpegExtractAudio',
                             'preferredcodec': 'mp3',
@@ -116,6 +116,7 @@ if url.strip() and st.session_state.status_color == "green":
                         'outtmpl': 'downloaded_video.%(ext)s',
                         'merge_output_format': 'mp4',
                         'nocheckcertificate': True,
+                        'extractor_args': {'youtube': {'player_client': ['web_embedded', 'web', 'tv']}}, # 🌟 Fix for 403 error
                     }
                 
                 with yt_dlp.YoutubeDL(download_opts) as ydl_dl:
