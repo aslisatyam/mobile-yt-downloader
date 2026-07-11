@@ -2,7 +2,7 @@ import streamlit as st
 import yt_dlp
 import os
 
-# Page Configuration (Mobile and Desktop friendly)
+# Page Configuration
 st.set_page_config(page_title="Python YT Pro Downloader", page_icon="🚀", layout="centered")
 
 st.markdown("<h1 style='text-align: center; color: #FF0000;'>YouTube Pro Downloader</h1>", unsafe_allow_html=True)
@@ -19,27 +19,29 @@ if 'status_msg' not in st.session_state:
 if 'status_color' not in st.session_state:
     st.session_state.status_color = "gray"
 
-url = st.text_input("Paste Video/Playlist Link Here:", placeholder="https://youtube.com...")
+url = st.text_input("Paste Video/Playlist Link Here:", placeholder="https://www.youtube.com/watch?v=...")
 
-# 🌟 Jo cookies file aapne upload ki hai, usko attach karne ka logic
 COOKIE_FILE = "cookies.txt"
 
+# 🌟 152 Error bypass karne ke liye Referer header lagaya gaya hai
 YDL_COMMON_OPTS = {
     'nocheckcertificate': True,
     'quiet': True,
     'no_warnings': True,
     'extractor_args': {
         'youtube': {
-            'player_client': ['android', 'web_embedded'],
+            'player_client': ['web_embedded', 'android'],
             'player_skip': ['webpage', 'configs']
         }
     },
     'http_headers': {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.5',
+        'Referer': 'https://google.com',  # 🔥 This fixes Error Code 152
     }
 }
 
-# Agar repo me cookie file maujood hai toh options me automatic merge karega
 if os.path.exists(COOKIE_FILE):
     YDL_COMMON_OPTS['cookiefile'] = COOKIE_FILE
 
@@ -59,7 +61,7 @@ if st.button("🔍 Fetch Video Info", use_container_width=True):
                         st.session_state.status_color = "green"
                         
                         entries = list(info.get('entries', []))
-                        st.session_state.thumbnail_url = entries[0].get('thumbnail') if entries and entries[0] else None
+                        st.session_state.thumbnail_url = entries.get('thumbnail') if entries and entries else None
                     else:
                         formats = info.get('formats', [])
                         qualities = set()
