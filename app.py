@@ -19,13 +19,23 @@ if 'status_msg' not in st.session_state:
 if 'status_color' not in st.session_state:
     st.session_state.status_color = "gray"
 
-url = st.text_input("Paste Video/Playlist Link Here:", placeholder="https://youtube.com...")
+url = st.text_input("Paste Video/Playlist Link Here:", placeholder="https://www.youtube.com/watch?v=...")
 
-# Safe common extractor options for both operations
-EXTRACT_ARGS = {
-    'youtube': {
-        'player_client': ['android', 'ios', 'web_embedded'],
-        'player_skip': ['webpage', 'configs']
+# 🌟 Bot detection se bachne ke liye OAuth2 Token Mode configure kiya hai
+YDL_COMMON_OPTS = {
+    'nocheckcertificate': True,
+    'quiet': True,
+    'no_warnings': True,
+    'username': 'oauth2', # Force login to authenticate as authentic non-bot session
+    'password': '',       # Oauth flow rules requires blank password string
+    'extractor_args': {
+        'youtube': {
+            'player_client': ['web_embedded', 'android'],
+            'player_skip': ['webpage', 'configs']
+        }
+    },
+    'http_headers': {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
     }
 }
 
@@ -34,16 +44,8 @@ if st.button("🔍 Fetch Video Info", use_container_width=True):
         st.error("Bhai, pehle URL toh daalo!")
     else:
         with st.spinner("🔍 Info fetch ho rahi hai... Please wait..."):
-            ydl_opts = {
-                'nocheckcertificate': True,
-                'quiet': True,
-                'http_headers': {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                },
-                'extractor_args': EXTRACT_ARGS,
-            }
             try:
-                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                with yt_dlp.YoutubeDL(YDL_COMMON_OPTS) as ydl:
                     info = ydl.extract_info(url.strip(), download=False)
                     is_playlist = 'entries' in info
                     
@@ -82,8 +84,14 @@ if st.button("🔍 Fetch Video Info", use_container_width=True):
                         
                         st.session_state.thumbnail_url = info.get('thumbnail')
             except Exception as e:
-                st.session_state.status_msg = f"❌ Info fetch fail ho gayi! {str(e)}"
-                st.session_state.status_color = "red"
+                # Oauth trigger message guide injection handle safely
+                err_str = str(e)
+                if "To sign in" in err_str or "code" in err_str:
+                    st.session_state.status_msg = f"🔑 App Logs check karein! Google authorization authentication required."
+                    st.session_state.status_color = "orange"
+                else:
+                    st.session_state.status_msg = f"❌ Info fetch fail ho gayi! {err_str}"
+                    st.session_state.status_color = "red"
 
 st.markdown(f"<p style='color: {st.session_state.status_color}; font-style: italic;'>{st.session_state.status_msg}</p>", unsafe_allow_html=True)
 
@@ -98,19 +106,19 @@ if url.strip() and st.session_state.status_color == "green":
     if st.button("🚀 Prepare Download Link", use_container_width=True):
         with st.spinner("⏳ Server par file taiyar ho rahi hai..."):
             try:
+                download_opts = YDL_COMMON_OPTS.copy()
+                
                 if is_mp3:
                     out_filename = "downloaded_audio.mp3"
-                    download_opts = {
+                    download_opts.update({
                         'format': 'bestaudio/best',
                         'outtmpl': 'downloaded_audio.%(ext)s',
-                        'nocheckcertificate': True,
-                        'extractor_args': EXTRACT_ARGS,
                         'postprocessors': [{
                             'key': 'FFmpegExtractAudio',
                             'preferredcodec': 'mp3',
                             'preferredquality': '192',
                         }],
-                    }
+                    })
                 else:
                     out_filename = "downloaded_video.mp4"
                     if selected_quality in st.session_state.available_formats:
@@ -119,13 +127,11 @@ if url.strip() and st.session_state.status_color == "green":
                     else:
                         format_selector = 'bestvideo+bestaudio/best'
                         
-                    download_opts = {
+                    download_opts.update({
                         'format': format_selector,
                         'outtmpl': 'downloaded_video.%(ext)s',
                         'merge_output_format': 'mp4',
-                        'nocheckcertificate': True,
-                        'extractor_args': EXTRACT_ARGS,
-                    }
+                    })
                 
                 with yt_dlp.YoutubeDL(download_opts) as ydl_dl:
                     ydl_dl.download([url.strip()])
