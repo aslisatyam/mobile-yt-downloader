@@ -19,7 +19,15 @@ if 'status_msg' not in st.session_state:
 if 'status_color' not in st.session_state:
     st.session_state.status_color = "gray"
 
-url = st.text_input("Paste Video/Playlist Link Here:", placeholder="https://www.youtube.com/watch?v=...")
+url = st.text_input("Paste Video/Playlist Link Here:", placeholder="https://youtube.com...")
+
+# Safe common extractor options for both operations
+EXTRACT_ARGS = {
+    'youtube': {
+        'player_client': ['android', 'ios', 'web_embedded'],
+        'player_skip': ['webpage', 'configs']
+    }
+}
 
 if st.button("🔍 Fetch Video Info", use_container_width=True):
     if not url.strip():
@@ -32,7 +40,7 @@ if st.button("🔍 Fetch Video Info", use_container_width=True):
                 'http_headers': {
                     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
                 },
-                'extractor_args': {'youtube': {'player_client': ['web_embedded', 'web', 'tv']}}, # 🌟 Extra clients backup ke liye
+                'extractor_args': EXTRACT_ARGS,
             }
             try:
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -96,7 +104,7 @@ if url.strip() and st.session_state.status_color == "green":
                         'format': 'bestaudio/best',
                         'outtmpl': 'downloaded_audio.%(ext)s',
                         'nocheckcertificate': True,
-                        'extractor_args': {'youtube': {'player_client': ['web_embedded', 'web', 'tv']}}, # 🌟 Fix for 403 error
+                        'extractor_args': EXTRACT_ARGS,
                         'postprocessors': [{
                             'key': 'FFmpegExtractAudio',
                             'preferredcodec': 'mp3',
@@ -116,7 +124,7 @@ if url.strip() and st.session_state.status_color == "green":
                         'outtmpl': 'downloaded_video.%(ext)s',
                         'merge_output_format': 'mp4',
                         'nocheckcertificate': True,
-                        'extractor_args': {'youtube': {'player_client': ['web_embedded', 'web', 'tv']}}, # 🌟 Fix for 403 error
+                        'extractor_args': EXTRACT_ARGS,
                     }
                 
                 with yt_dlp.YoutubeDL(download_opts) as ydl_dl:
