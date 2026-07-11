@@ -21,21 +21,28 @@ if 'status_color' not in st.session_state:
 
 url = st.text_input("Paste Video/Playlist Link Here:", placeholder="https://youtube.com...")
 
+# 🌟 403 Forbidden se bachne ke liye safe Android client parameters
+SAFE_OPTS = {
+    'nocheckcertificate': True,
+    'quiet': True,
+    'extractor_args': {
+        'youtube': {
+            'player_client': ['android', 'web_embedded'],
+            'player_skip': ['webpage', 'configs']
+        }
+    },
+    'http_headers': {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    }
+}
+
 if st.button("🔍 Fetch Video Info", use_container_width=True):
     if not url.strip():
         st.error("Bhai, pehle URL toh daalo!")
     else:
         with st.spinner("🔍 Info fetch ho rahi hai... Please wait..."):
-            ydl_opts = {
-                'nocheckcertificate': True,
-                'quiet': True,
-                'http_headers': {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                },
-                'extractor_args': {'youtube': {'player_client': ['web', 'default']}},
-            }
             try:
-                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                with yt_dlp.YoutubeDL(SAFE_OPTS) as ydl:
                     info = ydl.extract_info(url.strip(), download=False)
                     is_playlist = 'entries' in info
                     
@@ -52,7 +59,6 @@ if st.button("🔍 Fetch Video Info", use_container_width=True):
                         st.session_state.available_formats.clear()
                         
                         for f in formats:
-                            # 🌟 Sirf wahi formats lenge jisme video aur audio dono pehle se mixed hain (Bina ffmpeg ke liye)
                             if f.get('height') and f.get('vcodec') != 'none' and f.get('acodec') != 'none':
                                 h = f.get('height')
                                 quality_str = f"{h}p"
@@ -91,15 +97,17 @@ is_mp3 = st.checkbox("🎵 Download as MP3 (Audio Only)")
 
 if url.strip() and st.session_state.status_color == "green":
     if st.button("🚀 Prepare Download Link", use_container_width=True):
-        with st.spinner("⏳ Server par file taiyar ho rahi hai, thoda time lag sakta hai..."):
+        with st.spinner("⏳ Server par file taiyar ho rahi hai..."):
             try:
+                # 🌟 Download ke waqt bhi SAFE_OPTS use karenge taaki 403 error na aaye
+                download_opts = SAFE_OPTS.copy()
+                
                 if is_mp3:
                     out_filename = "downloaded_audio.mp3"
-                    download_opts = {
+                    download_opts.update({
                         'format': 'bestaudio',
                         'outtmpl': 'downloaded_audio.%(ext)s',
-                        'nocheckcertificate': True,
-                    }
+                    })
                 else:
                     out_filename = "downloaded_video.mp4"
                     if selected_quality in st.session_state.available_formats:
@@ -108,11 +116,10 @@ if url.strip() and st.session_state.status_color == "green":
                     else:
                         format_selector = 'best[ext=mp4]/best'
                         
-                    download_opts = {
+                    download_opts.update({
                         'format': format_selector,
                         'outtmpl': 'downloaded_video.%(ext)s',
-                        'nocheckcertificate': True,
-                    }
+                    })
                 
                 with yt_dlp.YoutubeDL(download_opts) as ydl_dl:
                     file_info = ydl_dl.extract_info(url.strip(), download=True)
