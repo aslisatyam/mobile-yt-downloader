@@ -5,11 +5,9 @@ import os
 # Page Configuration
 st.set_page_config(page_title="Python YT Pro Downloader", page_icon="🚀", layout="centered")
 
-# App Formatting (Jaise aapke original GUI mein tha)
 st.markdown("<h1 style='text-align: center; color: #FF0000;'>YouTube Pro Downloader</h1>", unsafe_allow_html=True)
 st.markdown("<p style='text-align: center;'>Bhai, link dalo aur mast video/audio download karo!</p>", unsafe_allow_html=True)
 
-# Session state initialize karna data track rakhne ke liye
 if 'available_formats' not in st.session_state:
     st.session_state.available_formats = {}
 if 'qualities_list' not in st.session_state:
@@ -21,10 +19,8 @@ if 'status_msg' not in st.session_state:
 if 'status_color' not in st.session_state:
     st.session_state.status_color = "gray"
 
-# Input Box
 url = st.text_input("Paste Video/Playlist Link Here:", placeholder="https://youtube.com...")
 
-# 1. FETCH INFO LOGIC
 if st.button("🔍 Fetch Video Info", use_container_width=True):
     if not url.strip():
         st.error("Bhai, pehle URL toh daalo!")
@@ -55,9 +51,9 @@ if st.button("🔍 Fetch Video Info", use_container_width=True):
                         qualities = set()
                         st.session_state.available_formats.clear()
                         
+                        # 🌟 Ab FFmpeg hai, toh hum saari high qualities (1080p, 2K, 4K) fetch kar sakte hain
                         for f in formats:
-                            # 🌟 Sirf wahi formats lenge jisme video aur audio dono mix hon (bina ffmpeg ke chalne ke liye)
-                            if f.get('height') and f.get('vcodec') != 'none' and f.get('acodec') != 'none':
+                            if f.get('height') and f.get('vcodec') != 'none':
                                 h = f.get('height')
                                 quality_str = f"{h}p"
                                 qualities.add(quality_str)
@@ -76,69 +72,65 @@ if st.button("🔍 Fetch Video Info", use_container_width=True):
                             st.session_state.status_color = "green"
                         else:
                             st.session_state.qualities_list = ["Best Quality (Auto)"]
-                            st.session_state.status_msg = "✅ Video mil gayi! Direct download par click karein."
-                            st.session_state.status_color = "green"
                         
                         st.session_state.thumbnail_url = info.get('thumbnail')
             except Exception as e:
                 st.session_state.status_msg = f"❌ Info fetch fail ho gayi! {str(e)}"
                 st.session_state.status_color = "red"
 
-# Status Display
 st.markdown(f"<p style='color: {st.session_state.status_color}; font-style: italic;'>{st.session_state.status_msg}</p>", unsafe_allow_html=True)
 
-# Quality Select Dropdown
 selected_quality = st.selectbox("Select Video Quality:", st.session_state.qualities_list)
 
-# Thumbnail Image
 if st.session_state.thumbnail_url:
     st.image(st.session_state.thumbnail_url, caption="Video/Playlist Thumbnail", width=300)
 
-# MP3 Audio Checkbox
 is_mp3 = st.checkbox("🎵 Download as MP3 (Audio Only)")
 
-# 2. DOWNLOAD BUTTON LOGIC
 if url.strip() and st.session_state.status_color == "green":
     if st.button("🚀 Prepare Download Link", use_container_width=True):
-        with st.spinner("⏳ Server par file taiyar ho rahi hai, thoda time lag sakta hai..."):
+        with st.spinner("⏳ Server par file taiyar ho rahi hai, isme thoda zyada time lag sakta hai kyunki high-quality video aur audio merge ho rahe hain..."):
             try:
                 if is_mp3:
                     out_filename = "downloaded_audio.mp3"
-                    # Audio formats direct m4a/aac uthayenge jo bina ffmpeg ke convert ho sake
                     download_opts = {
-                        'format': 'bestaudio',
+                        'format': 'bestaudio/best',
                         'outtmpl': 'downloaded_audio.%(ext)s',
                         'nocheckcertificate': True,
+                        'postprocessors': [{
+                            'key': 'FFmpegExtractAudio',
+                            'preferredcodec': 'mp3',
+                            'preferredquality': '192',
+                        }],
                     }
                 else:
                     out_filename = "downloaded_video.mp4"
                     if selected_quality in st.session_state.available_formats:
                         v_id = st.session_state.available_formats[selected_quality]['format_id']
-                        format_selector = v_id
+                        format_selector = f"{v_id}+bestaudio/best"
                     else:
-                        format_selector = 'best[ext=mp4]/best'
+                        format_selector = 'bestvideo+bestaudio/best'
                         
                     download_opts = {
                         'format': format_selector,
                         'outtmpl': 'downloaded_video.%(ext)s',
+                        'merge_output_format': 'mp4',
                         'nocheckcertificate': True,
                     }
                 
                 with yt_dlp.YoutubeDL(download_opts) as ydl_dl:
-                    file_info = ydl_dl.extract_info(url.strip(), download=True)
-                    ext = file_info.get('ext', 'mp4') if not is_mp3 else file_info.get('ext', 'm4a')
-                    real_filename = f"downloaded_audio.{ext}" if is_mp3 else f"downloaded_video.{ext}"
+                    ydl_dl.download([url.strip()])
                 
-                if os.path.exists(real_filename):
-                    with open(real_filename, "rb") as file:
+                if os.path.exists(out_filename):
+                    with open(out_filename, "rb") as file:
                         st.download_button(
                             label="📥 Click Here to Save to Device",
                             data=file,
-                            file_name=f"audio.{ext}" if is_mp3 else f"video.{ext}",
-                            mime=f"audio/{ext}" if is_mp3 else f"video/{ext}",
+                            file_name=f"audio.mp3" if is_mp3 else f"video.mp4",
+                            mime="audio/mpeg" if is_mp3 else "video/mp4",
                             use_container_width=True
                         )
-                    os.remove(real_filename)
+                    os.remove(out_filename)
                     st.balloons()
             except Exception as e:
                 st.error(f"❌ Kuch error aaya: {str(e)}")
