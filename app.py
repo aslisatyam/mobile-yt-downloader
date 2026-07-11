@@ -2,7 +2,7 @@ import streamlit as st
 import yt_dlp
 import os
 
-# Page Configuration
+# Page Configuration (Mobile and Desktop friendly)
 st.set_page_config(page_title="Python YT Pro Downloader", page_icon="🚀", layout="centered")
 
 st.markdown("<h1 style='text-align: center; color: #FF0000;'>YouTube Pro Downloader</h1>", unsafe_allow_html=True)
@@ -19,18 +19,18 @@ if 'status_msg' not in st.session_state:
 if 'status_color' not in st.session_state:
     st.session_state.status_color = "gray"
 
-url = st.text_input("Paste Video/Playlist Link Here:", placeholder="https://www.youtube.com/watch?v=...")
+url = st.text_input("Paste Video/Playlist Link Here:", placeholder="https://youtube.com...")
 
-# 🌟 Bot detection se bachne ke liye OAuth2 Token Mode configure kiya hai
+# 🌟 Jo cookies file aapne upload ki hai, usko attach karne ka logic
+COOKIE_FILE = "cookies.txt"
+
 YDL_COMMON_OPTS = {
     'nocheckcertificate': True,
     'quiet': True,
     'no_warnings': True,
-    'username': 'oauth2', # Force login to authenticate as authentic non-bot session
-    'password': '',       # Oauth flow rules requires blank password string
     'extractor_args': {
         'youtube': {
-            'player_client': ['web_embedded', 'android'],
+            'player_client': ['android', 'web_embedded'],
             'player_skip': ['webpage', 'configs']
         }
     },
@@ -38,6 +38,10 @@ YDL_COMMON_OPTS = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
     }
 }
+
+# Agar repo me cookie file maujood hai toh options me automatic merge karega
+if os.path.exists(COOKIE_FILE):
+    YDL_COMMON_OPTS['cookiefile'] = COOKIE_FILE
 
 if st.button("🔍 Fetch Video Info", use_container_width=True):
     if not url.strip():
@@ -55,7 +59,7 @@ if st.button("🔍 Fetch Video Info", use_container_width=True):
                         st.session_state.status_color = "green"
                         
                         entries = list(info.get('entries', []))
-                        st.session_state.thumbnail_url = entries.get('thumbnail') if entries and entries else None
+                        st.session_state.thumbnail_url = entries[0].get('thumbnail') if entries and entries[0] else None
                     else:
                         formats = info.get('formats', [])
                         qualities = set()
@@ -84,14 +88,8 @@ if st.button("🔍 Fetch Video Info", use_container_width=True):
                         
                         st.session_state.thumbnail_url = info.get('thumbnail')
             except Exception as e:
-                # Oauth trigger message guide injection handle safely
-                err_str = str(e)
-                if "To sign in" in err_str or "code" in err_str:
-                    st.session_state.status_msg = f"🔑 App Logs check karein! Google authorization authentication required."
-                    st.session_state.status_color = "orange"
-                else:
-                    st.session_state.status_msg = f"❌ Info fetch fail ho gayi! {err_str}"
-                    st.session_state.status_color = "red"
+                st.session_state.status_msg = f"❌ Info fetch fail ho gayi! {str(e)}"
+                st.session_state.status_color = "red"
 
 st.markdown(f"<p style='color: {st.session_state.status_color}; font-style: italic;'>{st.session_state.status_msg}</p>", unsafe_allow_html=True)
 
