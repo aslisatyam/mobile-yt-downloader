@@ -1,12 +1,14 @@
 import streamlit as st
 import yt_dlp
 import os
+import tempfile
 
-st.set_page_config(page_title="Premium YT Downloader", page_icon="🎬", layout="centered")
+st.set_page_config(page_title="Ultimate YT Downloader", page_icon="🎬", layout="centered")
 
-st.title("🎬 Premium YouTube Downloader (With Audio)")
-st.write("Apni video ka link paste karein aur full sound ke sath best quality me download karein!")
+st.title("🎬 Ultimate YouTube Downloader")
+st.write("Ab har quality me video download karein full sound ke sath!")
 
+# Initialize session states
 if 'video_data' not in st.session_state:
     st.session_state.video_data = None
 if 'current_url' not in st.session_state:
@@ -18,10 +20,10 @@ if url != st.session_state.current_url:
     st.session_state.video_data = None
     st.session_state.current_url = url
 
-# Step 1: Fetch Video Details
+# Step 1: Fetch Video Details & Qualities (Even separated ones)
 if url and st.session_state.video_data is None:
     if st.button("🔍 Fetch Video Details", use_container_width=True):
-        with st.spinner("Video details scan ho rahi hain..."):
+        with st.spinner("Video formats scan ho rahe hain..."):
             try:
                 ydl_opts = {'quiet': True, 'no_warnings': True}
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -30,39 +32,28 @@ if url and st.session_state.video_data is None:
                     thumbnail = info.get('thumbnail')
                     formats = info.get('formats', [])
                     
-                    unique_formats = {}
-                    
-                    # 1. Sabse pehle un formats ko filter karein jisme video aur audio dono pehle se mixed ho (Progressive Streams)
+                    qualities = set()
                     for f in formats:
-                        # vcodec aur acodec dono 'none' nahi hone chahiye, matlab dono maujood hain
-                        if f.get('vcodec') != 'none' and f.get('acodec') != 'none' and f.get('height'):
-                            res = f"{f.get('height')}p"
-                            ext = f.get('ext', 'mp4')
-                            label = f"{res} (Sound Included - .{ext})"
-                            unique_formats[label] = f.get('url')
+                        if f.get('height') and f.get('vcodec') != 'none':
+                            # Saari heights (resolutions) collect karein jaise 1080, 720, 480, 360
+                            qualities.add(f.get('height'))
                     
-                    # 2. Agar koi mixed format nahi mila, toh fallback ke liye best combine stream uthayein
-                    if not unique_formats:
-                        best_url = info.get('url')
-                        if best_url:
-                            unique_formats["Best Available Quality (With Sound)"] = best_url
-
-                    sorted_labels = sorted(unique_formats.keys(), key=lambda x: int(x.split('p')[0]) if 'p' in x else 0, reverse=True)
+                    # Sort qualities high to low
+                    sorted_qualities = sorted(list(qualities), reverse=True)
+                    quality_labels = [f"{q}p" for q in sorted_qualities]
                     
                     st.session_state.video_data = {
                         'title': title,
                         'thumbnail': thumbnail,
-                        'formats_dict': unique_formats,
-                        'sorted_labels': sorted_labels
+                        'quality_labels': quality_labels
                     }
                     st.rerun()
             except Exception as e:
-                st.error(f"Error: Link sahi nahi hai. Details: {e}")
+                st.error(f"Error: Details fetch nahi ho payin. Details: {e}")
 
-# Step 2: Show UI & Handover Download
+# Step 2: Show UI & High-Quality Server Side Processing
 if st.session_state.video_data:
     data = st.session_state.video_data
-    
     st.success(f"**🎬 Video Found:** {data['title']}")
     
     if data['thumbnail']:
@@ -70,19 +61,53 @@ if st.session_state.video_data:
         
     st.write("---")
     
-    if data['sorted_labels']:
-        selected_label = st.selectbox("⚡ Video Quality Select Karein:", data['sorted_labels'])
-        final_download_url = data['formats_dict'][selected_label]
+    if data['quality_labels']:
+        selected_quality = st.selectbox("⚡ Video Quality Select Karein:", data['quality_labels'])
         
-        # Sahi Tarika: Direct anchor link jo browser ko progressive stream file deliver karega
-        st.markdown(
-            f'<a href="{final_download_url}" target="_blank" download="{data["title"]}.mp4" style="display: inline-block; padding: 14px 28px; background-color: #25D366; color: white; text-decoration: none; border-radius: 8px; font-weight: bold; text-align: center; width: 100%; font-size: 18px; box-shadow: 0px 4px 10px rgba(0,0,0,0.15);">📥 Download Now ({selected_label})</a>',
-            unsafe_allow_html=True
-        )
+        # Streamlit standard Download Button
+        # Yeh tabhi chalega jab user download par click karega (Lazy processing)
+        height = selected_quality.replace('p', '')
         
-        st.caption("💡 **Important Note:** Agar button par click karne ke baad video download hone ki jagah browser me play hone lage, toh video player ke kone me **3 dots (...)** dikhenge, unpar click karke **'Download'** select karein, video audio ke sath save ho jayegi!")
+        # Temp directory for processing
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_template = os.path.join(tmpdir, '%(title)s.%(ext)s')
+            
+            # yt-dlp option jo best video (selected height tak) aur best audio ko download karke merge karega
+            # Formats setup: select specific height video + best audio
+            ydl_merge_opts = {
+                'format': f'bestvideo[height<={height}][ext=mp4]+bestaudio[ext=m4a]/best[height<={height}][ext=mp4]/best',
+                'merge_output_format': 'mp4',
+                'outtmpl': output_template,
+                'quiet': True
+            }
+            
+            # Button trigger mechanism
+            if st.button(f"📥 Process & Download {selected_quality}", use_container_width=True):
+                with st.spinner("Server par video aur sound ko combine kiya ja raha hai... Isme 10-20 seconds lag sakte hain."):
+                    try:
+                        with yt_dlp.YoutubeDL(ydl_merge_opts) as ydl:
+                            info_dict = ydl.extract_info(url, download=True)
+                            filename = ydl.prepare_filename(info_dict)
+                            # Format change safety extension check
+                            if not os.path.exists(filename):
+                                filename = os.path.splitext(filename)[0] + '.mp4'
+                            
+                            # Read file bytes to serve to user browser
+                            with open(filename, "rb") as file:
+                                video_bytes = file.read()
+                                
+                        # Final download trigger inside browser
+                        st.download_button(
+                            label="🎉 Video Ready! Click here to Save",
+                            data=video_bytes,
+                            file_name=f"{data['title']}_{selected_quality}.mp4",
+                            mime="video/mp4",
+                            use_container_width=True
+                        )
+                    except Exception as e:
+                        st.error(f"Processing error: {e}. Make sure 'ffmpeg' is added to your packages.txt file!")
     else:
-        st.error("Is video ke liye koi valid sound-supported format nahi mil paya.")
+        st.error("Formats load nahi ho paaye.")
         
     if st.button("🔄 Clear & Paste New Link", type="secondary"):
         st.session_state.video_data = None
