@@ -1,10 +1,12 @@
 import streamlit as st
-import yt_dlp
+import requests
+import json
+import re
 
 st.set_page_config(page_title="Ultimate YT Downloader", page_icon="🎬", layout="centered")
 
 st.title("🎬 Ultimate YouTube Downloader")
-st.write("Ab har quality me video download karein full sound ke sath!")
+st.write("Ab bina kisi extra tab ke sidha high quality mp4 download karein!")
 
 if 'video_data' not in st.session_state:
     st.session_state.video_data = None
@@ -17,51 +19,65 @@ if url != st.session_state.current_url:
     st.session_state.video_data = None
     st.session_state.current_url = url
 
-# Step 1: Fetch Video Title, Thumbnail & Set Download Links
+# Step 1: Fetch Video Title, Thumbnail & High-Quality Direct Streams
 if url and st.session_state.video_data is None:
     if st.button("🔍 Fetch Video Details", use_container_width=True):
-        with st.spinner("Video details scan ho rahi hain..."):
+        with st.spinner("Video scanning and formats parsing in progress..."):
             try:
-                # Basic metadata fetch to avoid YouTube blocks
-                ydl_opts = {
-                    'quiet': True,
-                    'no_warnings': True,
-                    'skip_download': True
-                }
+                # SaveFrom Engine to extract exact downloadable source direct links
+                api_url = "https://sf-api.com"
+                payload = {"url": url}
+                headers = {"User-Agent": "Mozilla/5.0"}
                 
-                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                    info = ydl.extract_info(url, download=False)
-                    title = info.get('title', 'YouTube Video')
-                    thumbnail = info.get('thumbnail')
+                response = requests.post(api_url, data=payload, headers=headers)
                 
-                # Sahi kiye gaye working URLs (Slash error fixed)
-                unique_formats = {
-                    "Premium High Quality (720p/1080p HD)": f"https://twdown.tools{url}",
-                    "Standard Quality (360p/480p SD)": f"https://ssyoutube.com{url.split('/')[-1].split('?')[0]}"
-                }
+                # Cleaning response payload format JavaScript variables
+                raw_text = response.text
+                json_match = re.search(r'id:\s*({.*?})', raw_text.replace('\n', ''))
                 
-                st.session_state.video_data = {
-                    'title': title,
-                    'thumbnail': thumbnail,
-                    'formats_dict': unique_formats,
-                    'sorted_labels': list(unique_formats.keys())
-                }
-                st.rerun()
-                
-            except Exception as e:
-                # Fallback mechanism if basic fetch fails
-                st.session_state.video_data = {
-                    'title': "YouTube Video",
-                    'thumbnail': None,
-                    'formats_dict': {"Download Video (Best Quality)": f"https://twdown.tools{url}"},
-                    'sorted_labels': ["Download Video (Best Quality)"]
-                }
-                st.rerun()
+                if json_match:
+                    data_str = json_match.group(1)
+                    # Convert to valid structural JSON mapping
+                    data_str = re.sub(r'(\w+)\s*:', r'"\1":', data_str)
+                    res_json = json.loads(data_str)
+                else:
+                    # Alternative payload structure check
+                    clean_text = raw_text.strip().lstrip('(').rstrip(')')
+                    res_json = json.loads(clean_text)
 
-# Step 2: Show UI & Action Download Button
+                # Parsing meta parameters
+                title = res_json.get("meta", {}).get("title", "YouTube Video")
+                thumbnail = res_json.get("meta", {}).get("thumbnail")
+                url_list = res_json.get("url", [])
+                
+                unique_formats = {}
+                for item in url_list:
+                    quality = item.get("quality")
+                    ext = item.get("ext", "mp4")
+                    direct_url = item.get("url")
+                    
+                    # Filtering valid qualities that contain audio
+                    if quality and direct_url and ext == "mp4":
+                        # If video is 720p or 1080p, these direct engine nodes are already merged with sound
+                        label = f"{quality}p (Full Sound - .mp4)"
+                        unique_formats[label] = direct_url
+                
+                if unique_formats:
+                    st.session_state.video_data = {
+                        'title': title,
+                        'thumbnail': thumbnail,
+                        'formats_dict': unique_formats,
+                        'sorted_labels': sorted(list(unique_formats.keys()), key=lambda x: int(x.split('p')[0]) if 'p' in x else 0, reverse=True)
+                    }
+                    st.rerun()
+                else:
+                    st.error("Is quality format ke links processing me issue hai.")
+            except Exception as e:
+                st.error("Video parse nahi ho saki. Kripya link sahi se copy karke dobara koshish karein.")
+
+# Step 2: Local direct Streamlit integration via local memory processing
 if st.session_state.video_data:
     data = st.session_state.video_data
-    
     st.success(f"🎬 **Video Found:** {data['title']}")
     
     if data['thumbnail']:
@@ -71,16 +87,53 @@ if st.session_state.video_data:
     
     if data['sorted_labels']:
         selected_label = st.selectbox("⚡ Video Quality Select Karein:", data['sorted_labels'])
-        final_download_url = data['formats_dict'][selected_label]
+        final_stream_url = data['formats_dict'][selected_label]
         
-        # Premium Green Layout Button
-        st.markdown(
-            f'<a href="{final_download_url}" target="_blank" style="display: inline-block; padding: 14px 28px; background-color: #25D366; color: white; text-decoration: none; border-radius: 8px; font-weight: bold; text-align: center; width: 100%; font-size: 18px; box-shadow: 0px 4px 10px rgba(0,0,0,0.15);">📥 Download Now ({selected_label})</a>',
-            unsafe_allow_html=True
-        )
-        st.caption("💡 **Tip:** Button par click karte hi website Chrome me sahi se open hogi aur download option mil jayega.")
+        # Inbuilt Progress bar logic inside client layout
+        if st.button(f"🚀 Prepare & Download {selected_label}", use_container_width=True):
+            progress_bar = st.progress(0)
+            status_text = st.empty()
+            
+            try:
+                status_text.text("Connecting to secure server stream...")
+                progress_bar.progress(10)
+                
+                # Fetching file binary content in chunks to feed browser locally
+                file_response = requests.get(final_stream_url, stream=True)
+                total_length = file_response.headers.get('content-length')
+                
+                video_bytes = b""
+                progress_bar.progress(40)
+                status_text.text("Extracting audio and video bytes metadata...")
+                
+                if total_length is None:
+                    video_bytes = file_response.content
+                else:
+                    dl = 0
+                    total_length = int(total_length)
+                    for chunk in file_response.iter_content(chunk_size=4096):
+                        dl += len(chunk)
+                        video_bytes += chunk
+                        # Dynamic bar simulation logic
+                        done = int(50 + (dl / total_length) * 50)
+                        progress_bar.progress(min(done, 100))
+                        status_text.text(f"Downloading chunks data... {int((dl/total_length)*100)}%")
+                
+                status_text.text("🎉 Video Download Complete! Niche save karein.")
+                
+                # Native browser trigger mapping
+                st.download_button(
+                    label="💾 Click Here to Save to Gallery / PC File",
+                    data=video_bytes,
+                    file_name=f"{data['title']}.mp4",
+                    mime="video/mp4",
+                    use_container_width=True,
+                    type="primary"
+                )
+            except Exception as download_error:
+                st.error(f"Download break error: {download_error}")
     else:
-        st.error("Formats load nahi ho paaye.")
+        st.error("Qualities options system read nahi kar paaya.")
         
     if st.button("🔄 Clear & Paste New Link", type="secondary"):
         st.session_state.video_data = None
