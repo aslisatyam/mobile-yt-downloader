@@ -1,12 +1,11 @@
 import streamlit as st
-import yt_dlp
+import requests
 
 st.set_page_config(page_title="Ultimate YT Downloader", page_icon="🎬", layout="centered")
 
 st.title("🎬 Ultimate YouTube Downloader")
-st.write("Ab har quality me video download karein full sound ke sath!")
+st.write("Ab har quality me video download karein bina kisi error ke!")
 
-# Initialize session states
 if 'video_data' not in st.session_state:
     st.session_state.video_data = None
 if 'current_url' not in st.session_state:
@@ -18,76 +17,81 @@ if url != st.session_state.current_url:
     st.session_state.video_data = None
     st.session_state.current_url = url
 
-# Step 1: Fetch Video Details & Filter Sound Formats
+# Step 1: Fetch Details using Free External API (Bypasses YouTube 403 block)
 if url and st.session_state.video_data is None:
     if st.button("🔍 Fetch Video Details", use_container_width=True):
-        with st.spinner("Video formats scan ho rahe hain..."):
+        with st.spinner("High-quality formats scan ho rahe hain..."):
             try:
-                # 403 Error se bachne ke liye user-agent set karna zaroorat hai
-                ydl_opts = {
-                    'quiet': True, 
-                    'no_warnings': True,
-                    'http_headers': {
-                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-                    }
+                # Pubic open API to fetch pre-merged high quality links
+                api_url = f"https://cobalt.tools"
+                headers = {
+                    "Accept": "application/json",
+                    "Content-Type": "application/json"
                 }
-                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                    info = ydl.extract_info(url, download=False)
-                    title = info.get('title', 'Video')
-                    thumbnail = info.get('thumbnail')
-                    formats = info.get('formats', [])
+                # Cobalt API parameters for high quality
+                payload = {
+                    "url": url,
+                    "vQuality": "1080", # Request max 1080p
+                    "isAudioOnly": False
+                }
+                
+                response = requests.post(api_url, json=payload, headers=headers)
+                
+                if response.status_code == 200:
+                    res_data = response.json()
                     
-                    unique_formats = {}
-                    
-                    # Sirf wahi formats nikalenge jisme audio + video dono sath ho, taaki download hone par direct sound chale aur 403 na aaye
-                    for f in formats:
-                        if f.get('height') and f.get('vcodec') != 'none' and f.get('acodec') != 'none':
-                            res = f"{f.get('height')}p"
-                            ext = f.get('ext', 'mp4')
-                            label = f"{res} (With Sound - .{ext})"
-                            unique_formats[label] = f.get('url')
-                    
-                    # Fallback agar koi progressive stream nahi mili
-                    if not unique_formats:
-                        best_url = info.get('url')
-                        if best_url:
-                            unique_formats["Best Auto Quality (With Sound)"] = best_url
-                    
-                    sorted_labels = sorted(unique_formats.keys(), key=lambda x: int(x.split('p')[0]) if 'p' in x else 0, reverse=True)
-                    
-                    st.session_state.video_data = {
-                        'title': title,
-                        'thumbnail': thumbnail,
-                        'formats_dict': unique_formats,
-                        'sorted_labels': sorted_labels
-                    }
-                    st.rerun()
+                    if res_data.get("status") == "stream" or res_data.get("status") == "picker":
+                        download_url = res_data.get("url")
+                        picker_links = res_data.get("picker", [])
+                        
+                        unique_formats = {}
+                        
+                        # Agar multiple qualities milti hain (Picker format)
+                        if picker_links:
+                            for item in picker_links:
+                                quality_label = item.get("type", "Video") + "p"
+                                if "audio" not in quality_label.lower():
+                                    unique_formats[f"{quality_label} (High Quality)"] = item.get("url")
+                        
+                        # Agar single best link milta hai
+                        if download_url:
+                            unique_formats["Best Quality Available (Up to 1080p)"] = download_url
+                            
+                        sorted_labels = list(unique_formats.keys())
+                        
+                        st.session_state.video_data = {
+                            'title': "YouTube Video",
+                            'formats_dict': unique_formats,
+                            'sorted_labels': sorted_labels
+                        }
+                        st.rerun()
+                    else:
+                        st.error("Video processing fail ho gayi. Kripya doobara koshish karein.")
+                else:
+                    st.error(f"API Error: Server respond nahi kar raha hai. Status: {response.status_code}")
             except Exception as e:
-                st.error(f"Error: Details fetch nahi ho payin. YouTube block ho sakta hai ya link galat hai. Details: {e}")
+                st.error(f"Error: Connection fail ho gaya. Details: {e}")
 
-# Step 2: Show UI & Direct Client-Side Download
+# Step 2: Show Quality Selector & Download Button
 if st.session_state.video_data:
     data = st.session_state.video_data
-    st.success(f"**🎬 Video Found:** {data['title']}")
+    st.success("✅ Video Found!")
     
-    if data['thumbnail']:
-        st.image(data['thumbnail'], use_container_width=True)
-        
     st.write("---")
     
     if data['sorted_labels']:
         selected_label = st.selectbox("⚡ Video Quality Select Karein:", data['sorted_labels'])
         final_download_url = data['formats_dict'][selected_label]
         
-        # Is HTML link se user ka browser khud YouTube se file stream karega, Streamlit Cloud server beech me block nahi hoga
+        # Premium design green button
         st.markdown(
-            f'<a href="{final_download_url}" target="_blank" download="{data["title"]}.mp4" style="display: inline-block; padding: 14px 28px; background-color: #25D366; color: white; text-decoration: none; border-radius: 8px; font-weight: bold; text-align: center; width: 100%; font-size: 18px; box-shadow: 0px 4px 10px rgba(0,0,0,0.15);">📥 Download Now ({selected_label})</a>',
+            f'<a href="{final_download_url}" target="_blank" style="display: inline-block; padding: 14px 28px; background-color: #25D366; color: white; text-decoration: none; border-radius: 8px; font-weight: bold; text-align: center; width: 100%; font-size: 18px; box-shadow: 0px 4px 10px rgba(0,0,0,0.15);">📥 Download Now ({selected_label})</a>',
             unsafe_allow_html=True
         )
         
-        st.info("💡 **Important:** Button dabane par agar naye tab me video play hone lage, toh wahan right side corner me **3 dots (...)** par click karke **Download** daba dein!")
+        st.caption("💡 **Tip:** Button par click karte hi aapki premium quality video download hona shuru ho jayegi!")
     else:
-        st.error("Formats load nahi ho paaye.")
+        st.error("Koi high-quality format nahi mil paya.")
         
     if st.button("🔄 Clear & Paste New Link", type="secondary"):
         st.session_state.video_data = None
