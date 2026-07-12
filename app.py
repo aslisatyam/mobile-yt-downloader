@@ -4,6 +4,19 @@ import re
 
 st.set_page_config(page_title="Mobile YT Downloader", page_icon="📱", layout="centered")
 
+# --- GITHUB PROFILE AUR STREAMLIT MENU HIDE KARNE KA CODE ---
+hide_streamlit_style = """
+            <style>
+            #MainMenu {visibility: hidden;}
+            footer {visibility: hidden;}
+            header {visibility: hidden;}
+            .viewerBadge_link__1S137 {display: none !important;}
+            input[type="text"] {font-size: 16px !important;}
+            </style>
+            """
+st.markdown(hide_streamlit_style, unsafe_allow_html=True)
+# -----------------------------------------------------------
+
 # Satyam Branding Clean UI Layout
 st.title("📱 Mobile YT Downloader")
 st.caption("⚡ Made by Satyam")
@@ -13,7 +26,7 @@ if 'video_data' not in st.session_state:
 if 'current_url' not in st.session_state:
     st.session_state.current_url = ""
 
-# Input box without old helper lines
+# Input box
 url = st.text_input("Enter YouTube Video URL:", placeholder="https://youtube.com...")
 
 if url != st.session_state.current_url:
@@ -47,7 +60,6 @@ if url and st.session_state.video_data is None:
                     
                     unique_formats = {}
                     
-                    # Filtering valid mp4 progressive links with sound integration
                     for f in formats:
                         height = f.get('height')
                         if height and f.get('vcodec') != 'none' and f.get('acodec') != 'none' and f.get('url'):
@@ -86,7 +98,6 @@ if st.session_state.video_data:
         selected_label = st.selectbox("⚡ Video Quality Select Karein:", data['sorted_labels'])
         final_download_url = data['formats_dict'][selected_label]
         
-        # Inbuilt dynamic custom button that acts straight into chrome system
         st.markdown(
             f'<a href="{final_download_url}" target="_blank" style="display: inline-block; padding: 14px 28px; background-color: #25D366; color: white; text-decoration: none; border-radius: 8px; font-weight: bold; text-align: center; width: 100%; font-size: 18px; box-shadow: 0px 4px 10px rgba(0,0,0,0.15); margin-bottom: 10px;">📥 Download Now ({selected_label})</a>',
             unsafe_allow_html=True
