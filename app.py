@@ -1,28 +1,32 @@
 import streamlit as st
 import yt_dlp
+import io
+import re
+import requests
 
-st.set_page_config(page_title="Ultimate YT Downloader", page_icon="🎬", layout="centered")
+st.set_page_config(page_title="Mobile YT Downloader", page_icon="📱", layout="centered")
 
-st.title("🎬 Ultimate YouTube Downloader")
-st.write("Link paste karein aur mobile/PC browser me best quality me download karein!")
+# Custom Title and Branding (Made by Satyam)
+st.title("📱 Mobile YT Downloader")
+st.caption("⚡ Made by Satyam")
 
 if 'video_data' not in st.session_state:
     st.session_state.video_data = None
 if 'current_url' not in st.session_state:
     st.session_state.current_url = ""
 
+# Clean Input Box without old instruction text
 url = st.text_input("Enter YouTube Video URL:", placeholder="https://youtube.com...")
 
 if url != st.session_state.current_url:
     st.session_state.video_data = None
     st.session_state.current_url = url
 
-# Step 1: Fetch Video Details, Thumbnail & All Available Stream Links
+# Step 1: Extract best available high qualities dynamically
 if url and st.session_state.video_data is None:
     if st.button("🔍 Fetch Video Details", use_container_width=True):
-        with st.spinner("Video details scan ho rahi hain..."):
+        with st.spinner("Scanning for highest quality formats..."):
             try:
-                # Optimized configuration taaki YouTube server local IP block na kare
                 ydl_opts = {
                     'quiet': True,
                     'no_warnings': True,
@@ -45,22 +49,21 @@ if url and st.session_state.video_data is None:
                     
                     unique_formats = {}
                     
-                    # Saare formats check karke unhe extract karna
+                    # Scanning for maximum possible resolution streams containing pre-merged sound
                     for f in formats:
                         height = f.get('height')
-                        if height and f.get('vcodec') != 'none' and f.get('url'):
-                            # 720p aur usse upar wale formats browser routing ke liye arrange karein
+                        if height and f.get('vcodec') != 'none' and f.get('acodec') != 'none' and f.get('url'):
                             if height >= 720:
                                 label = f"{height}p (High Quality HD - Sound Included)"
                             else:
                                 label = f"{height}p (Standard Quality - Sound Included)"
                             unique_formats[label] = f.get('url')
                     
-                    # Fallback option agar progressive selection skip ho jaye
+                    # Direct fallback backup if stream array cuts down
                     if not unique_formats and info.get('url'):
-                        unique_formats["Best Quality Stream (With Sound)"] = info.get('url')
+                        unique_formats["Best Quality Available (With Sound)"] = info.get('url')
                         
-                    sorted_labels = sorted(list(unique_formats.keys()), key=lambda x: int(''.join(filter(str.isdigit, x))) if any(c.isdigit() for c in x) else 0, reverse=True)
+                    sorted_labels = sorted(list(unique_formats.keys()), key=lambda x: int(re.search(r'\d+', x).group()) if re.search(r'\d+', x) else 0, reverse=True)
                     
                     st.session_state.video_data = {
                         'title': title,
@@ -70,9 +73,9 @@ if url and st.session_state.video_data is None:
                     }
                     st.rerun()
             except Exception as e:
-                st.error(f"Error: Details extract nahi ho payin. Kripya ek baar dobara try karein!")
+                st.error("Error: Server responds slow. Kripya ek baar dobara try karein!")
 
-# Step 2: Display UI & Handover Direct Stream Link via Green Button
+# Step 2: Live In-App Progress Bar Downloading Block (No Redirection)
 if st.session_state.video_data:
     data = st.session_state.video_data
     st.success(f"🎬 **Video Found:** {data['title']}")
@@ -84,17 +87,53 @@ if st.session_state.video_data:
     
     if data['sorted_labels']:
         selected_label = st.selectbox("⚡ Video Quality Select Karein:", data['sorted_labels'])
-        final_download_url = data['formats_dict'][selected_label]
+        final_stream_url = data['formats_dict'][selected_label]
         
-        # Premium green link layout button (Yeh direct naye tab me open karega mobile chrome par)
-        st.markdown(
-            f'<a href="{final_download_url}" target="_blank" download="{data["title"]}.mp4" style="display: inline-block; padding: 14px 28px; background-color: #25D366; color: white; text-decoration: none; border-radius: 8px; font-weight: bold; text-align: center; width: 100%; font-size: 18px; box-shadow: 0px 4px 10px rgba(0,0,0,0.15);">📥 Download Now ({selected_label})</a>',
-            unsafe_allow_html=True
-        )
-        
-        st.caption("💡 **Mobile Chrome User Tip:** Agar button par click karne ke baad video naye tab me play hone lage, toh niche kone me **3 dots (...)** par click karke **'Download'** select kar lein, video gallery me save ho jayegi!")
+        # Real-time process initiation trigger inside the same page layout
+        if st.button(f"🚀 Prepare & Download {selected_label}", use_container_width=True):
+            progress_bar = st.progress(0)
+            status_text = st.empty()
+            
+            try:
+                status_text.text("Connecting to secure stream node...")
+                progress_bar.progress(15)
+                
+                response = requests.get(final_stream_url, stream=True, headers={'User-Agent': 'Mozilla/5.0'})
+                total_length = response.headers.get('content-length')
+                
+                buffer = io.BytesIO()
+                progress_bar.progress(35)
+                
+                if total_length is None:
+                    buffer.write(response.content)
+                    progress_bar.progress(100)
+                else:
+                    dl = 0
+                    total_length = int(total_length)
+                    for chunk in response.iter_content(chunk_size=65536):  # Large size chunks for faster fetch
+                        if chunk:
+                            dl += len(chunk)
+                            buffer.write(chunk)
+                            # Custom visual animation progression calculation
+                            done = int(35 + (dl / total_length) * 65)
+                            progress_bar.progress(min(done, 100))
+                            status_text.text(f"Downloading stream parts... {int((dl/total_length)*100)}%")
+                
+                status_text.text("🎉 Video Ready! Below button par click karke save karein.")
+                
+                # Direct in-browser local save activation layout
+                st.download_button(
+                    label="💾 Click Here to Save to Device / Gallery",
+                    data=buffer.getvalue(),
+                    file_name=f"{data['title']}.mp4",
+                    mime="video/mp4",
+                    use_container_width=True,
+                    type="primary"
+                )
+            except Exception as dl_err:
+                st.error(f"Download break error: {dl_err}")
     else:
-        st.error("Is video ke liye formats load nahi ho paaye.")
+        st.error("No valid quality layers could be loaded.")
         
     if st.button("🔄 Clear & Paste New Link", type="secondary"):
         st.session_state.video_data = None
