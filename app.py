@@ -1,10 +1,10 @@
 import streamlit as st
-import requests
+import yt_dlp
 
 st.set_page_config(page_title="Ultimate YT Downloader", page_icon="🎬", layout="centered")
 
 st.title("🎬 Ultimate YouTube Downloader")
-st.write("Ab bina kisi ad ya redirect ke sidha high-quality MP4 download karein!")
+st.write("Link paste karein aur mobile/PC browser me best quality me download karein!")
 
 if 'video_data' not in st.session_state:
     st.session_state.video_data = None
@@ -17,62 +17,62 @@ if url != st.session_state.current_url:
     st.session_state.video_data = None
     st.session_state.current_url = url
 
-# Step 1: Fetch details via stable open-source API node
+# Step 1: Fetch Video Details, Thumbnail & All Available Stream Links
 if url and st.session_state.video_data is None:
     if st.button("🔍 Fetch Video Details", use_container_width=True):
-        with st.spinner("Video parameters link check ho raha hai..."):
+        with st.spinner("Video details scan ho rahi hain..."):
             try:
-                # Extracting video ID from URL
-                video_id = ""
-                if "youtu.be/" in url:
-                    video_id = url.split("youtu.be/")[1].split("?")[0]
-                elif "watch?v=" in url:
-                    video_id = url.split("watch?v=")[1].split("&")[0]
+                # Optimized configuration taaki YouTube server local IP block na kare
+                ydl_opts = {
+                    'quiet': True,
+                    'no_warnings': True,
+                    'extractor_args': {
+                        'youtube': {
+                            'player_client': ['android', 'web'],
+                            'skip': ['hls', 'dash']
+                        }
+                    },
+                    'http_headers': {
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                    }
+                }
                 
-                if not video_id:
-                    st.error("Kripya sahi YouTube link dalein!")
-                else:
-                    # Using global public open-source invidious node api
-                    api_url = f"https://nerdvpn.de{video_id}"
-                    response = requests.get(api_url, timeout=10)
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    info = ydl.extract_info(url, download=False)
+                    title = info.get('title', 'YouTube Video')
+                    thumbnail = info.get('thumbnail')
+                    formats = info.get('formats', [])
                     
-                    if response.status_code == 200:
-                        res_data = response.json()
-                        title = res_data.get("title", "YouTube Video")
+                    unique_formats = {}
+                    
+                    # Saare formats check karke unhe extract karna
+                    for f in formats:
+                        height = f.get('height')
+                        if height and f.get('vcodec') != 'none' and f.get('url'):
+                            # 720p aur usse upar wale formats browser routing ke liye arrange karein
+                            if height >= 720:
+                                label = f"{height}p (High Quality HD - Sound Included)"
+                            else:
+                                label = f"{height}p (Standard Quality - Sound Included)"
+                            unique_formats[label] = f.get('url')
+                    
+                    # Fallback option agar progressive selection skip ho jaye
+                    if not unique_formats and info.get('url'):
+                        unique_formats["Best Quality Stream (With Sound)"] = info.get('url')
                         
-                        # Fetch best quality secure images thumbnails
-                        thumbs = res_data.get("videoThumbnails", [])
-                        thumbnail = thumbs[0].get("url") if thumbs else None
-                        
-                        # Filtering complete video/audio merged stream options
-                        format_streams = res_data.get("formatStreams", [])
-                        unique_formats = {}
-                        
-                        for stream in format_streams:
-                            quality = stream.get("qualityLabel") # e.g. 720p, 360p
-                            container = stream.get("container") # e.g. mp4
-                            direct_link = stream.get("url")
-                            
-                            if quality and container == "mp4" and direct_link:
-                                label = f"{quality} (Full HD - Sound Included)" if "720" in quality or "1080" in quality else f"{quality} (Standard)"
-                                unique_formats[label] = direct_link
-                        
-                        if unique_formats:
-                            st.session_state.video_data = {
-                                'title': title,
-                                'thumbnail': thumbnail,
-                                'formats_dict': unique_formats,
-                                'sorted_labels': list(unique_formats.keys())
-                            }
-                            st.rerun()
-                        else:
-                            st.error("Is video ke formats verify nahi ho paye.")
-                    else:
-                        st.error("Server down hai, kripya ek baar dobara button dabayein.")
+                    sorted_labels = sorted(list(unique_formats.keys()), key=lambda x: int(''.join(filter(str.isdigit, x))) if any(c.isdigit() for c in x) else 0, reverse=True)
+                    
+                    st.session_state.video_data = {
+                        'title': title,
+                        'thumbnail': thumbnail,
+                        'formats_dict': unique_formats,
+                        'sorted_labels': sorted_labels
+                    }
+                    st.rerun()
             except Exception as e:
-                st.error("Network temporary slow hai, please click again.")
+                st.error(f"Error: Details extract nahi ho payin. Kripya ek baar dobara try karein!")
 
-# Step 2: Display inside the same tab smoothly
+# Step 2: Display UI & Handover Direct Stream Link via Green Button
 if st.session_state.video_data:
     data = st.session_state.video_data
     st.success(f"🎬 **Video Found:** {data['title']}")
@@ -84,16 +84,17 @@ if st.session_state.video_data:
     
     if data['sorted_labels']:
         selected_label = st.selectbox("⚡ Video Quality Select Karein:", data['sorted_labels'])
-        final_stream_url = data['formats_dict'][selected_label]
+        final_download_url = data['formats_dict'][selected_label]
         
-        # Native browser trigger button (Bina doosra tab khule isi window me save hoga)
+        # Premium green link layout button (Yeh direct naye tab me open karega mobile chrome par)
         st.markdown(
-            f'<a href="{final_stream_url}" download="{data["title"]}.mp4" style="display: inline-block; padding: 14px 28px; background-color: #25D366; color: white; text-decoration: none; border-radius: 8px; font-weight: bold; text-align: center; width: 100%; font-size: 18px; box-shadow: 0px 4px 10px rgba(0,0,0,0.15);">📥 Direct Download Now</a>',
+            f'<a href="{final_download_url}" target="_blank" download="{data["title"]}.mp4" style="display: inline-block; padding: 14px 28px; background-color: #25D366; color: white; text-decoration: none; border-radius: 8px; font-weight: bold; text-align: center; width: 100%; font-size: 18px; box-shadow: 0px 4px 10px rgba(0,0,0,0.15);">📥 Download Now ({selected_label})</a>',
             unsafe_allow_html=True
         )
-        st.caption("💡 **Tip:** Click karte hi video file niche downloading bar me background me shuru ho jayegi!")
+        
+        st.caption("💡 **Mobile Chrome User Tip:** Agar button par click karne ke baad video naye tab me play hone lage, toh niche kone me **3 dots (...)** par click karke **'Download'** select kar lein, video gallery me save ho jayegi!")
     else:
-        st.error("No streams available.")
+        st.error("Is video ke liye formats load nahi ho paaye.")
         
     if st.button("🔄 Clear & Paste New Link", type="secondary"):
         st.session_state.video_data = None
