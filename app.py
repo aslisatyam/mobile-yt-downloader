@@ -48,15 +48,14 @@ if url and st.session_state.video_data is None:
                     
                     unique_formats = {}
                     
-                    # Web formats extract karein jisme pre-merged formats (jaise 720p/360p) download ke liye ready ho
+                    # Web formats extract karein jisme formats download ke liye ready ho
                     for f in formats:
                         height = f.get('height')
                         # Check dynamic combinations
                         if height and f.get('vcodec') != 'none' and f.get('url'):
-                            # Filter standard resolutions
-                            if height in:
-                                label = f"{height}p (High Quality)" if height >= 720 else f"{height}p (Standard Quality)"
-                                unique_formats[label] = f.get('url')
+                            # Sahi syntax: standard resolutions ko add karna
+                            label = f"{height}p (High Quality)" if height >= 720 else f"{height}p (Standard Quality)"
+                            unique_formats[label] = f.get('url')
                     
                     # Fallback single download link
                     if not unique_formats and info.get('url'):
