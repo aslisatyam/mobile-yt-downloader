@@ -1,10 +1,10 @@
 import streamlit as st
-import yt_dlp
+import requests
 
 st.set_page_config(page_title="Ultimate YT Downloader", page_icon="🎬", layout="centered")
 
 st.title("🎬 Ultimate YouTube Downloader")
-st.write("Bina kisi server block ke sidha high-quality MP4 video download karein!")
+st.write("Ab bina kisi ad ya redirect ke sidha high-quality MP4 download karein!")
 
 if 'video_data' not in st.session_state:
     st.session_state.video_data = None
@@ -17,33 +17,62 @@ if url != st.session_state.current_url:
     st.session_state.video_data = None
     st.session_state.current_url = url
 
-# Step 1: Basic Metadata Fetch (Isme YouTube kabhi block nahi karta)
+# Step 1: Fetch details via stable open-source API node
 if url and st.session_state.video_data is None:
     if st.button("🔍 Fetch Video Details", use_container_width=True):
-        with st.spinner("Video details access ho rahi hain..."):
+        with st.spinner("Video parameters link check ho raha hai..."):
             try:
-                ydl_opts = {
-                    'quiet': True,
-                    'no_warnings': True,
-                    'skip_download': True,
-                }
+                # Extracting video ID from URL
+                video_id = ""
+                if "youtu.be/" in url:
+                    video_id = url.split("youtu.be/")[1].split("?")[0]
+                elif "watch?v=" in url:
+                    video_id = url.split("watch?v=")[1].split("&")[0]
                 
-                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                    info = ydl.extract_info(url, download=False)
-                    title = info.get('title', 'YouTube Video')
-                    thumbnail = info.get('thumbnail')
-                    video_id = info.get('id')
+                if not video_id:
+                    st.error("Kripya sahi YouTube link dalein!")
+                else:
+                    # Using global public open-source invidious node api
+                    api_url = f"https://nerdvpn.de{video_id}"
+                    response = requests.get(api_url, timeout=10)
                     
-                st.session_state.video_data = {
-                    'title': title,
-                    'thumbnail': thumbnail,
-                    'video_id': video_id
-                }
-                st.rerun()
+                    if response.status_code == 200:
+                        res_data = response.json()
+                        title = res_data.get("title", "YouTube Video")
+                        
+                        # Fetch best quality secure images thumbnails
+                        thumbs = res_data.get("videoThumbnails", [])
+                        thumbnail = thumbs[0].get("url") if thumbs else None
+                        
+                        # Filtering complete video/audio merged stream options
+                        format_streams = res_data.get("formatStreams", [])
+                        unique_formats = {}
+                        
+                        for stream in format_streams:
+                            quality = stream.get("qualityLabel") # e.g. 720p, 360p
+                            container = stream.get("container") # e.g. mp4
+                            direct_link = stream.get("url")
+                            
+                            if quality and container == "mp4" and direct_link:
+                                label = f"{quality} (Full HD - Sound Included)" if "720" in quality or "1080" in quality else f"{quality} (Standard)"
+                                unique_formats[label] = direct_link
+                        
+                        if unique_formats:
+                            st.session_state.video_data = {
+                                'title': title,
+                                'thumbnail': thumbnail,
+                                'formats_dict': unique_formats,
+                                'sorted_labels': list(unique_formats.keys())
+                            }
+                            st.rerun()
+                        else:
+                            st.error("Is video ke formats verify nahi ho paye.")
+                    else:
+                        st.error("Server down hai, kripya ek baar dobara button dabayein.")
             except Exception as e:
-                st.error("Error: YouTube server responds slow. Kripya ek baar dobara try karein!")
+                st.error("Network temporary slow hai, please click again.")
 
-# Step 2: Show UI & In-Browser Safe Action Download Engine
+# Step 2: Display inside the same tab smoothly
 if st.session_state.video_data:
     data = st.session_state.video_data
     st.success(f"🎬 **Video Found:** {data['title']}")
@@ -53,39 +82,18 @@ if st.session_state.video_data:
         
     st.write("---")
     
-    st.write("⚡ **Select Download Format:**")
-    
-    # Clean Title for filename
-    clean_title = "".join([c for c in data['title'] if c.isalpha() or c.isdigit() or c==' ']).rstrip()
-    
-    # 100% Client-Side In-Browser Native Downloader Layout
-    # Yeh code user ke chrome browser ki engine javascript ko trigger karega bina server crash ke
-    high_quality_script = f"""
-    <div style="text-align: center; margin-bottom: 15px;">
-        <button onclick="startBrowserDownload()" style="width: 100%; padding: 14px 28px; background-color: #25D366; color: white; border: none; border-radius: 8px; font-weight: bold; font-size: 18px; cursor: pointer; box-shadow: 0px 4px 10px rgba(0,0,0,0.15);">
-            🚀 Instant Download MP4 (Best HD Quality)
-        </button>
-    </div>
-
-    <script>
-    function startBrowserDownload() {{
-        // YouTube embedded extraction secure gateway
-        var dispatchUrl = "https://9xbuddy.com/process?url=https://youtube.com{data['video_id']}";
+    if data['sorted_labels']:
+        selected_label = st.selectbox("⚡ Video Quality Select Karein:", data['sorted_labels'])
+        final_stream_url = data['formats_dict'][selected_label]
         
-        // Window parameters to process background conversion seamlessly
-        var win = window.open(dispatchUrl, '_blank');
-        if (win) {{
-            win.focus();
-        }} else {{
-            alert('Please allow popups for this website to initiate your video download!');
-        }}
-    }}
-    </script>
-    """
-    
-    # Injecting the native safe browser trigger component
-    st.components.v1.html(high_quality_script, height=70)
-    st.info("💡 **Kaise kaam karega?** Button par click karte hi aapka Chrome Browser directly YouTube ke high-quality server node se video aur clear audio fetch karke file save kar dega. Koi data corrupt nahi hoga!")
+        # Native browser trigger button (Bina doosra tab khule isi window me save hoga)
+        st.markdown(
+            f'<a href="{final_stream_url}" download="{data["title"]}.mp4" style="display: inline-block; padding: 14px 28px; background-color: #25D366; color: white; text-decoration: none; border-radius: 8px; font-weight: bold; text-align: center; width: 100%; font-size: 18px; box-shadow: 0px 4px 10px rgba(0,0,0,0.15);">📥 Direct Download Now</a>',
+            unsafe_allow_html=True
+        )
+        st.caption("💡 **Tip:** Click karte hi video file niche downloading bar me background me shuru ho jayegi!")
+    else:
+        st.error("No streams available.")
         
     if st.button("🔄 Clear & Paste New Link", type="secondary"):
         st.session_state.video_data = None
