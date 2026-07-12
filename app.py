@@ -1,6 +1,6 @@
 import streamlit as st
-import requests
-import json
+import yt_dlp
+import io
 import re
 
 st.set_page_config(page_title="Ultimate YT Downloader", page_icon="🎬", layout="centered")
@@ -19,63 +19,58 @@ if url != st.session_state.current_url:
     st.session_state.video_data = None
     st.session_state.current_url = url
 
-# Step 1: Fetch Video Title, Thumbnail & High-Quality Direct Streams
+# Step 1: Fetch Video Details directly using optimized browser signatures
 if url and st.session_state.video_data is None:
     if st.button("🔍 Fetch Video Details", use_container_width=True):
-        with st.spinner("Video scanning and formats parsing in progress..."):
+        with st.spinner("Video details scan ho rahi hain..."):
             try:
-                # SaveFrom Engine to extract exact downloadable source direct links
-                api_url = "https://sf-api.com"
-                payload = {"url": url}
-                headers = {"User-Agent": "Mozilla/5.0"}
+                # Direct safe configurations to fetch true quality layouts
+                ydl_opts = {
+                    'quiet': True,
+                    'no_warnings': True,
+                    'extractor_args': {
+                        'youtube': {
+                            'player_client': ['android', 'web'],
+                            'skip': ['hls', 'dash']
+                        }
+                    },
+                    'http_headers': {
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                    }
+                }
                 
-                response = requests.post(api_url, data=payload, headers=headers)
-                
-                # Cleaning response payload format JavaScript variables
-                raw_text = response.text
-                json_match = re.search(r'id:\s*({.*?})', raw_text.replace('\n', ''))
-                
-                if json_match:
-                    data_str = json_match.group(1)
-                    # Convert to valid structural JSON mapping
-                    data_str = re.sub(r'(\w+)\s*:', r'"\1":', data_str)
-                    res_json = json.loads(data_str)
-                else:
-                    # Alternative payload structure check
-                    clean_text = raw_text.strip().lstrip('(').rstrip(')')
-                    res_json = json.loads(clean_text)
-
-                # Parsing meta parameters
-                title = res_json.get("meta", {}).get("title", "YouTube Video")
-                thumbnail = res_json.get("meta", {}).get("thumbnail")
-                url_list = res_json.get("url", [])
-                
-                unique_formats = {}
-                for item in url_list:
-                    quality = item.get("quality")
-                    ext = item.get("ext", "mp4")
-                    direct_url = item.get("url")
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    info = ydl.extract_info(url, download=False)
+                    title = info.get('title', 'YouTube Video')
+                    thumbnail = info.get('thumbnail')
+                    formats = info.get('formats', [])
                     
-                    # Filtering valid qualities that contain audio
-                    if quality and direct_url and ext == "mp4":
-                        # If video is 720p or 1080p, these direct engine nodes are already merged with sound
-                        label = f"{quality}p (Full Sound - .mp4)"
-                        unique_formats[label] = direct_url
-                
-                if unique_formats:
+                    unique_formats = {}
+                    
+                    # Filtering formats that contain pre-merged audio and video tracks
+                    for f in formats:
+                        height = f.get('height')
+                        if height and f.get('vcodec') != 'none' and f.get('acodec') != 'none' and f.get('url'):
+                            label = f"{height}p (Sound Included - .mp4)"
+                            unique_formats[label] = f.get('url')
+                    
+                    # Fallback configuration
+                    if not unique_formats and info.get('url'):
+                        unique_formats["Best Auto Quality (With Sound)"] = info.get('url')
+                        
+                    sorted_labels = sorted(list(unique_formats.keys()), key=lambda x: int(re.search(r'\d+', x).group()) if re.search(r'\d+', x) else 0, reverse=True)
+                    
                     st.session_state.video_data = {
                         'title': title,
                         'thumbnail': thumbnail,
                         'formats_dict': unique_formats,
-                        'sorted_labels': sorted(list(unique_formats.keys()), key=lambda x: int(x.split('p')[0]) if 'p' in x else 0, reverse=True)
+                        'sorted_labels': sorted_labels
                     }
                     st.rerun()
-                else:
-                    st.error("Is quality format ke links processing me issue hai.")
             except Exception as e:
-                st.error("Video parse nahi ho saki. Kripya link sahi se copy karke dobara koshish karein.")
+                st.error(f"Error: Connection reset. Link check karke dobara koshish karein.")
 
-# Step 2: Local direct Streamlit integration via local memory processing
+# Step 2: In-app Progressive Download with Real-time Progress Bar
 if st.session_state.video_data:
     data = st.session_state.video_data
     st.success(f"🎬 **Video Found:** {data['title']}")
@@ -89,51 +84,52 @@ if st.session_state.video_data:
         selected_label = st.selectbox("⚡ Video Quality Select Karein:", data['sorted_labels'])
         final_stream_url = data['formats_dict'][selected_label]
         
-        # Inbuilt Progress bar logic inside client layout
+        # Inbuilt progressive extraction
         if st.button(f"🚀 Prepare & Download {selected_label}", use_container_width=True):
             progress_bar = st.progress(0)
             status_text = st.empty()
             
             try:
-                status_text.text("Connecting to secure server stream...")
-                progress_bar.progress(10)
+                status_text.text("Connecting to secure video node...")
+                progress_bar.progress(15)
                 
-                # Fetching file binary content in chunks to feed browser locally
-                file_response = requests.get(final_stream_url, stream=True)
-                total_length = file_response.headers.get('content-length')
+                # Fetch data directly from stream URL via standard requests
+                import requests
+                response = requests.get(final_stream_url, stream=True, headers={'User-Agent': 'Mozilla/5.0'})
+                total_length = response.headers.get('content-length')
                 
-                video_bytes = b""
-                progress_bar.progress(40)
-                status_text.text("Extracting audio and video bytes metadata...")
+                buffer = io.BytesIO()
+                progress_bar.progress(35)
                 
                 if total_length is None:
-                    video_bytes = file_response.content
+                    buffer.write(response.content)
+                    progress_bar.progress(100)
                 else:
                     dl = 0
                     total_length = int(total_length)
-                    for chunk in file_response.iter_content(chunk_size=4096):
-                        dl += len(chunk)
-                        video_bytes += chunk
-                        # Dynamic bar simulation logic
-                        done = int(50 + (dl / total_length) * 50)
-                        progress_bar.progress(min(done, 100))
-                        status_text.text(f"Downloading chunks data... {int((dl/total_length)*100)}%")
+                    for chunk in response.iter_content(chunk_size=32768): # Optimized chunk processing block
+                        if chunk:
+                            dl += len(chunk)
+                            buffer.write(chunk)
+                            done = int(35 + (dl / total_length) * 65)
+                            progress_bar.progress(min(done, 100))
+                            status_text.text(f"Extracting high quality bytes... {int((dl/total_length)*100)}%")
                 
-                status_text.text("🎉 Video Download Complete! Niche save karein.")
+                status_text.text("🎉 Video Ready! Niche diye gaye button par click karke save karein.")
                 
-                # Native browser trigger mapping
+                # Native local browser file save action
                 st.download_button(
-                    label="💾 Click Here to Save to Gallery / PC File",
-                    data=video_bytes,
+                    label="💾 Click Here to Save to Local Storage",
+                    data=buffer.getvalue(),
                     file_name=f"{data['title']}.mp4",
                     mime="video/mp4",
                     use_container_width=True,
                     type="primary"
                 )
-            except Exception as download_error:
-                st.error(f"Download break error: {download_error}")
+            except Exception as download_err:
+                st.error(f"Download processing error: {download_err}")
     else:
-        st.error("Qualities options system read nahi kar paaya.")
+        st.error("No valid quality layers mapped.")
         
     if st.button("🔄 Clear & Paste New Link", type="secondary"):
         st.session_state.video_data = None
